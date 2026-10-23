@@ -1,0 +1,254 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>School Quest VR</title>
+  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #help {
+      position: fixed; z-index: 5; top: 10px; left: 10px;
+      padding: 10px 14px; background: #17213b;
+      color: white; border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+<div id="help">SCHOOL QUEST VR · WASD per muoverti sul PC</div>
+
+<a-scene background="color: #9bdcf5"
+         renderer="antialias: true; colorManagement: true"
+         hand-pinch-move>
+
+  <a-sky color="#9bdcf5"></a-sky>
+
+  <!-- Pavimento e pareti -->
+  <a-plane rotation="-90 0 0" width="30" height="30"
+           color="#e8d9b7"></a-plane>
+  <a-box position="0 2 -7" width="12" height="4"
+         depth="0.2" color="#ffe7a8"></a-box>
+  <a-box position="-6 2 -2" width="0.2" height="4"
+         depth="10" color="#ffcf87"></a-box>
+  <a-box position="6 2 -2" width="0.2" height="4"
+         depth="10" color="#ffcf87"></a-box>
+
+  <!-- Lavagna -->
+  <a-box position="0 2.2 -6.82" width="3.5"
+         height="1.6" depth="0.08" color="#285b50"></a-box>
+  <a-text value="BENVENUTO A SCUOLA!"
+          position="-1.5 2.3 -6.73" width="3"
+          color="white"></a-text>
+
+  <!-- Banchi -->
+  <a-box position="-2 0.8 -3" width="1.5"
+         height="0.12" depth="0.9" color="#e99a55"></a-box>
+  <a-box position="2 0.8 -3" width="1.5"
+         height="0.12" depth="0.9" color="#e99a55"></a-box>
+  <a-box position="-2 0.8 -5" width="1.5"
+         height="0.12" depth="0.9" color="#e99a55"></a-box>
+  <a-box position="2 0.8 -5" width="1.5"
+         height="0.12" depth="0.9" color="#e99a55"></a-box>
+
+  <!-- Indicatore XP -->
+  <a-entity position="-2.4 2.8 -3">
+    <a-plane width="2.4" height="0.55" color="#26345c"></a-plane>
+    <a-text id="xpText" value="LV 1  |  XP: 0"
+            align="center" width="3"
+            position="0 0 0.02" color="#ffffff"></a-text>
+  </a-entity>
+
+  <!-- Quiz in-world -->
+  <a-entity position="0 1.8 -3.5">
+    <a-plane width="3.5" height="2.5"
+             color="#26345c" opacity="0.96"></a-plane>
+    <a-text id="question"
+            value="QUIZ: Quanto fa 6 x 7?"
+            align="center" width="3.1"
+            position="0 0.8 0.03" color="#ffffff"></a-text>
+
+    <a-plane class="answer clickable" data-answer="0"
+             position="0 0.25 0.04" width="2.8"
+             height="0.4" color="#4388e8"></a-plane>
+    <a-text value="A  ·  42" align="center" width="2.5"
+            position="0 0.25 0.07" color="#ffffff"></a-text>
+
+    <a-plane class="answer clickable" data-answer="1"
+             position="0 -0.25 0.04" width="2.8"
+             height="0.4" color="#4388e8"></a-plane>
+    <a-text value="B  ·  36" align="center" width="2.5"
+            position="0 -0.25 0.07" color="#ffffff"></a-text>
+
+    <a-plane class="answer clickable" data-answer="2"
+             position="0 -0.75 0.04" width="2.8"
+             height="0.4" color="#4388e8"></a-plane>
+    <a-text value="C  ·  48" align="center" width="2.5"
+            position="0 -0.75 0.07" color="#ffffff"></a-text>
+
+    <a-text id="feedback" value="Seleziona una risposta"
+            align="center" width="3.2"
+            position="0 -1.12 0.04" color="#ffe58a"></a-text>
+  </a-entity>
+
+  <!-- Visuale in prima persona -->
+  <a-entity id="rig" position="0 0 2">
+    <a-entity id="camera" camera look-controls
+              wasd-controls="acceleration: 12"
+              position="0 1.6 0">
+      <a-entity cursor="fuse: true; fuseTimeout: 800"
+                raycaster="objects: .clickable"
+                position="0 0 -1"
+                geometry="primitive: ring; radiusInner: 0.008; radiusOuter: 0.014"
+                material="color: white; shader: flat">
+      </a-entity>
+    </a-entity>
+  </a-entity>
+
+</a-scene>
+
+<script>
+(() => {
+  let xp = 0;
+  let answered = false;
+
+  const questions = [
+    { q: "Quanto fa 6 x 7?", a: ["42", "36", "48"], correct: 0 },
+    { q: "Quanto fa 9 x 5?", a: ["40", "45", "54"], correct: 1 },
+    { q: "Qual è il pianeta rosso?", a: ["Venere", "Giove", "Marte"], correct: 2 }
+  ];
+  let qi = 0;
+
+  const $ = id => document.getElementById(id);
+
+  function renderQuestion() {
+    const q = questions[qi];
+    $("question").setAttribute("value", q.q);
+    document.querySelectorAll(".answer").forEach((el, i) => {
+      el.dataset.answer = i;
+      el.setAttribute("material", "color", "#4388e8");
+      el.parentNode.querySelectorAll("a-text").forEach(t => {
+        if (t.getAttribute("value").startsWith(["A", "B", "C"][i])) {
+          t.setAttribute("value", ["A", "B", "C"][i] + " · " + q.a[i]);
+        }
+      });
+    });
+    $("feedback").setAttribute("value", "Seleziona una risposta");
+    answered = false;
+  }
+
+  document.querySelectorAll(".answer").forEach(el => {
+    el.addEventListener("click", () => {
+      if (answered) return;
+      answered = true;
+      const correct = Number(el.dataset.answer) === questions[qi].correct;
+
+      if (correct) {
+        xp += 10;
+        $("feedback").setAttribute("value", "Corretto! +10 XP");
+        el.setAttribute("material", "color", "#25a96b");
+      } else {
+        $("feedback").setAttribute("value", "Non esatto! Riprova al prossimo quiz.");
+        el.setAttribute("material", "color", "#d64b58");
+      }
+
+      $("xpText").setAttribute("value",
+        "LV " + (1 + Math.floor(xp / 50)) + "  |  XP: " + xp);
+
+      if (correct) {
+        setTimeout(() => {
+          qi = (qi + 1) % questions.length;
+          renderQuestion();
+        }, 1300);
+      } else {
+        setTimeout(() => {
+          el.setAttribute("material", "color", "#4388e8");
+          answered = false;
+        }, 1000);
+      }
+    });
+  });
+
+  renderQuestion();
+})();
+
+// Movimento WebXR: pizzico pollice-indice della mano sinistra.
+// Se il tracking non è disponibile, resta possibile muoversi sul PC con WASD.
+AFRAME.registerComponent("hand-pinch-move", {
+  init() {
+    this.running = false;
+    this.pinch = false;
+    this.speed = 1.0;
+    this.lastTime = 0;
+    this.onStart = () => this.startTracking();
+    this.el.sceneEl?.addEventListener("enter-vr", this.onStart);
+    this.el.addEventListener("loaded", () => {
+      this.el.sceneEl.renderer.xr.addEventListener(
+        "sessionstart", this.onStart
+      );
+    });
+  },
+
+  startTracking() {
+    const scene = this.el.sceneEl;
+    const xr = scene.renderer && scene.renderer.xr;
+    const session = xr && xr.getSession();
+    if (!session || this.running) return;
+
+    this.running = true;
+    const refSpace = xr.getReferenceSpace();
+    const rig = document.querySelector("#rig").object3D;
+    const camera = document.querySelector("#camera").object3D;
+
+    const tick = (time, frame) => {
+      if (!this.running || !frame) return;
+
+      const source = Array.from(session.inputSources).find(
+        s => s.handedness === "left" && s.hand
+      );
+
+      let pinching = false;
+      if (source && refSpace) {
+        try {
+          const thumb = frame.getJointPose(
+            source.hand.get("thumb-tip"), refSpace
+          );
+          const index = frame.getJointPose(
+            source.hand.get("index-finger-tip"), refSpace
+          );
+          if (thumb && index) {
+            const a = thumb.transform.position;
+            const b = index.transform.position;
+            const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+            pinching = Math.sqrt(dx*dx + dy*dy + dz*dz) < 0.025;
+          }
+        } catch (_) {}
+      }
+
+      if (pinching) {
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        dir.y = 0;
+        if (dir.lengthSq() > 0.001) {
+          dir.normalize();
+          const dt = this.lastTime ? Math.min((time - this.lastTime) / 1000, 0.05) : 0;
+          rig.position.addScaledVector(dir, this.speed * dt);
+        }
+      }
+
+      this.lastTime = time;
+      session.requestAnimationFrame(tick);
+    };
+
+    session.addEventListener("end", () => {
+      this.running = false;
+      this.lastTime = 0;
+    }, { once: true });
+
+    session.requestAnimationFrame(tick);
+  }
+});
+})();
+</script>
+</body>
+</html>

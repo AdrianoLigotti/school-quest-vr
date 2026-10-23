@@ -174,20 +174,162 @@
 
 // Movimento WebXR: pizzico pollice-indice della mano sinistra.
 // Se il tracking non è disponibile, resta possibile muoversi sul PC con WASD.
+
 AFRAME.registerComponent("hand-pinch-move", {
   init() {
     this.running = false;
-    this.pinch = false;
     this.speed = 1.0;
     this.lastTime = 0;
+    this.session = null;
+
+    // Riutilizza il vettore per evitare allocazioni continue.
+    this.direction = new THREE.Vector3();
+
     this.onStart = () => this.startTracking();
-    this.el.sceneEl?.addEventListener("enter-vr", this.onStart);
-    this.el.addEventListener("loaded", () => {
-      this.el.sceneEl.renderer.xr.addEventListener(
-        "sessionstart", this.onStart
-      );
-    });
+
+    this.onLoaded = () => {
+      const scene = this.el.sceneEl;
+      const xr = scene && scene.renderer && scene.renderer.xr;
+
+      if (xr) {
+        xr.addEventListener("sessionstart", this.onStart);
+      }
+    };
+
+    this.el.addEventListener("enter-vr", this.onStart);
+    this.el.addEventListener("loaded", this.onLoaded);
+
+    // Gestisce anche il caso in cui la scena sia già caricata.
+    if (this.el.hasLoaded) {
+      this.onLoaded();
+    }
   },
+
+  startTracking() {
+    const scene = this.el.sceneEl;
+    const xr = scene && scene.renderer && scene.renderer.xr;
+    const session = xr && xr.getSession();
+
+    if (!session || this.running) return;
+
+    const refSpace = xr.getReferenceSpace();
+    const rigEl = document.querySelector("#rig");
+    const cameraEl = document.querySelector("#camera");
+
+    if (!refSpace || !rigEl || !cameraEl) return;
+
+    const rig = rigEl.object3D;
+    const camera = cameraEl.object3D;
+
+    this.running = true;
+    this.session = session;
+    this.lastTime = 0;
+
+    const stop = () => {
+      this.running = false;
+      this.lastTime = 0;
+      this.session = null;
+    };
+
+    session.addEventListener("end", stop, { once: true });
+
+    const tick = (time, frame) => {
+      if (!this.running || this.session !== session) return;
+      if (!frame || session !== xr.getSession()) return;
+
+      try {
+        let pinching = false;
+        let source = null;
+
+        for (const input of session.inputSources) {
+          if (input.handedness === "left" && input.hand) {
+            source = input;
+            break;
+          }
+        }
+
+        if (source) {
+          const thumb = frame.getJointPose(
+            source.hand.get("thumb-tip"),
+            refSpace
+          );
+
+          const index = frame.getJointPose(
+            source.hand.get("index-finger-tip"),
+            refSpace
+          );
+
+          if (thumb && index) {
+            const a = thumb.transform.position;
+            const b = index.transform.position;
+
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const dz = a.z - b.z;
+
+            pinching =
+              dx * dx + dy * dy + dz * dz < 0.025 * 0.025;
+          }
+        }
+
+        if (pinching) {
+          this.direction.set(0, 0, 0);
+          camera.getWorldDirection(this.direction);
+          this.direction.y = 0;
+
+          if (this.direction.lengthSq() > 0.001) {
+            this.direction.normalize();
+
+            const dt = this.lastTime
+              ? Math.min((time - this.lastTime) / 1000, 0.05)
+              : 0;
+
+            rig.position.addScaledVector(
+              this.direction,
+              this.speed * dt
+            );
+          }
+        }
+
+        this.lastTime = time;
+      } catch (error) {
+        // Un errore temporaneo del tracking non deve
+        // interrompere l'intera pagina.
+      }
+
+      if (this.running && this.session === session) {
+        try {
+          session.requestAnimationFrame(tick);
+        } catch (error) {
+          stop();
+        }
+      }
+    };
+
+    try {
+      session.requestAnimationFrame(tick);
+    } catch (error) {
+      stop();
+    }
+  },
+
+  remove() {
+    this.running = false;
+
+    this.el.removeEventListener("enter-vr", this.onStart);
+    this.el.removeEventListener("loaded", this.onLoaded);
+
+    const scene = this.el.sceneEl;
+    const xr = scene && scene.renderer && scene.renderer.xr;
+
+    if (xr) {
+      xr.removeEventListener("sessionstart", this.onStart);
+    }
+
+    this.session = null;
+  }
+});
+
 
   startTracking() {
     const scene = this.el.sceneEl;
